@@ -2,9 +2,16 @@
   "name": "postlight2md",
   "version": "0.0.0",
   "main": "index.js",
+  "type": "module",
+  "bin": {
+    "postlight2md": "./index.js",
+    "pmd": "./index.js"
+  },
   "scripts": {
     "start": "node ."
   },
-  "description": "",
-  "repository": "laggingreflex/postlight2md"
+  "dependencies": {
+    "@postlight/parser": "^2.2.3",
+    "yargs": "^17.7.2"
+  }
 }
