@@ -1,6 +1,6 @@
 # postlight2md
 
-`postlight2md` is a command-line tool that uses the Postlight Parser to extract content from web pages and convert it into different formats such as HTML, Markdown, or plain text.
+`postlight2md` is a command-line tool that uses the [Postlight Parser](https://www.npmjs.com/package/@postlight/parser) to extract content from web pages and convert it into different formats such as HTML, Markdown, or plain text.
 
 ## Installation
 
