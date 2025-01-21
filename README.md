@@ -1,5 +1,7 @@
 # postlight2md
 
+[![npm](https://img.shields.io/npm/v/postlight2md)](http://npmjs.com/package/postlight2md)
+
 `postlight2md` is a command-line tool that uses the [Postlight Parser](https://www.npmjs.com/package/@postlight/parser) to extract content from web pages and convert it into different formats such as HTML, Markdown, or plain text.
 
 ## Installation
