@@ -6,6 +6,7 @@ import Parser from '@postlight/parser';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import Bluebird from 'bluebird';
+import ProgressBar from 'progress';
 
 const argv = yargs(hideBin(process.argv))
   .usage('Usage: $0 <url> [options]')
@@ -44,21 +45,22 @@ const argv = yargs(hideBin(process.argv))
   .option('url-file', {
     alias: 'u',
     describe: 'File containing URLs to process',
-    type: 'string'
+    type: 'string',
   })
   .option('concurrency', {
     alias: 'c',
     describe: 'Number of concurrent requests',
     type: 'number',
-    default: 1
+    default: 1,
   })
-  .check(argv => {
+  .check((argv) => {
     if (!argv._.length && !argv.urlFile) {
-      throw new Error('You need to provide a URL to parse or a file containing URLs');
+      throw new Error(
+        'You need to provide a URL to parse or a file containing URLs'
+      );
     }
     return true;
-  })
-  .argv;
+  }).argv;
 
 const url = argv._[0];
 const options = {};
@@ -96,7 +98,7 @@ if (argv['add-extractor']) {
   options.addExtractor = argv['add-extractor'];
 }
 
-async function processUrl(url, options) {
+async function processUrl(url, options, bar) {
   try {
     const result = await Parser.parse(url, options);
     const content = result.content;
@@ -120,13 +122,20 @@ async function processUrl(url, options) {
   } catch (error) {
     console.error(error);
     process.exitCode = 1;
+  } finally {
+    if (bar) bar.tick(); // Update the progress bar
   }
 }
 
 async function processUrlsFromFile(filePath, concurrency, options) {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const urls = fileContent.split(/\r?\n/).filter(Boolean);
-  await Bluebird.map(urls, url => processUrl(url, options), { concurrency });
+  const bar = new ProgressBar('Processing [:bar] :current/:total', {
+    total: urls.length,
+  }); // Add this line
+  await Bluebird.map(urls, (url) => processUrl(url, options, bar), {
+    concurrency,
+  });
 }
 
 async function main() {
@@ -138,7 +147,7 @@ async function main() {
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
