@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import path from 'node:path';
-import fs from 'node:fs';
+import Path from 'node:path';
+import URL from 'node:url';
+import fs from 'fs-extra';
 import Parser from '@postlight/parser';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -62,17 +63,12 @@ const argv = yargs(hideBin(process.argv))
     return true;
   }).argv;
 
-const url = argv._[0];
-const options = {};
-
-// Rename format to contentType internally
 if (argv.format) {
-  options.contentType = argv.format;
   argv.contentType = argv.format;
 }
 
 if (argv.header) {
-  options.headers = argv.header.reduce((headers, header) => {
+  argv.headers = argv.header.reduce((headers, header) => {
     const [name, value] = header.split('=');
     headers[name] = value;
     return headers;
@@ -80,7 +76,7 @@ if (argv.header) {
 }
 
 if (argv.extend) {
-  options.extend = argv.extend.reduce((extend, ext) => {
+  argv.extend = argv.extend.reduce((extend, ext) => {
     const [name, value] = ext.split('=');
     extend[name] = value;
     return extend;
@@ -88,7 +84,7 @@ if (argv.extend) {
 }
 
 if (argv['extend-list']) {
-  options.extendList = argv['extend-list'].reduce((extendList, ext) => {
+  argv.extendList = argv['extend-list'].reduce((extendList, ext) => {
     const [name, value] = ext.split('=');
     extendList[name] = value;
     return extendList;
@@ -96,84 +92,142 @@ if (argv['extend-list']) {
 }
 
 if (argv['add-extractor']) {
-  options.addExtractor = argv['add-extractor'];
-}
-
-async function processUrl(url, options, bar) {
-  try {
-    const result = await Parser.parse(url, options);
-    const content = result.content;
-    if (argv.output !== false) {
-      let filename;
-      if (argv.output === true || argv.urlFile) {
-        const title = result.title || 'output';
-        filename =
-          title
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/(^-|-$)/g, '') + '.md';
-      } else {
-        filename = argv.output;
-      }
-      fs.writeFileSync(path.resolve(process.cwd(), filename), content);
-      console.log(`Content written to ${filename}`);
-    } else {
-      console.log(content);
-    }
-  } catch (error) {
-    console.error(error);
-    process.exitCode = 1;
-  } finally {
-    if (bar) bar.tick(); // Update the progress bar
-  }
-}
-
-async function processUrlsFromFile(filePath, concurrency, options) {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
-  const urls = fileContent.split(/\r?\n/).filter(Boolean);
-  const bar = new ProgressBar('Processing [:bar] :current/:total', {
-    total: urls.length,
-  });
-
-  let allContent = '';
-
-  await Bluebird.map(
-    urls,
-    async (url) => {
-      try {
-        // console.log(`options:`, options)
-        const result = await Parser.parse(url, options);
-        // const result = await Parser.parse(url, options);
-        // allContent += result.content + '\n\n';
-        allContent += `\n\n---\n---\n---\n# [${result.title}](${url})\n\n${result.content}\n`;
-      } catch (error) {
-        console.error(`Error processing ${url}: ${error.message}`);
-      } finally {
-        bar.tick();
-      }
-    },
-    { concurrency }
-  );
-
-  if (argv.output !== false) {
-    const outputFile = argv.output === true ? 'output.md' : argv.output;
-    fs.writeFileSync(path.resolve(process.cwd(), outputFile), allContent);
-    console.log(`Content written to ${outputFile}`);
-  } else {
-    console.log(allContent);
-  }
-}
-
-async function main() {
-  if (argv.urlFile) {
-    argv.output = argv.output !== false ? true : false;
-    await processUrlsFromFile(argv.urlFile, argv.concurrency, argv);
-  } else {
-    await processUrl(argv._[0], argv);
-  }
+  argv.addExtractor = argv['add-extractor'];
 }
 
 main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+async function processUrl(url, options) {
+  const result = await Parser.parse(url, options);
+  result.url = url;
+  return result;
+}
+
+async function processUrls(urls, options) {
+  const bar = new ProgressBar('Processing [:bar] :current/:total :log', {
+    total: urls.length,
+  });
+  return Bluebird.map(
+    urls,
+    (url) =>
+      processUrl(url, options)
+        .catch((error) => ({ url, error }))
+        .finally(() =>
+          bar.tick({
+            log: `Processed ${url}`,
+          })
+        ),
+    { concurrency: options.concurrency }
+  );
+}
+
+async function processUrlsFromFile(filePath, options) {
+  const fileContent = await fs.readFile(filePath, 'utf-8');
+  const urls = fileContent
+    .split(options.separator || /[\n\r]+/g)
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('http'))
+    .filter(Boolean);
+
+  return processUrls(urls, options);
+}
+
+async function main() {
+  const { _: urls, ...options } = argv;
+  let results;
+  try {
+    if (options.urlFile) {
+      results = await processUrlsFromFile(options.urlFile, options);
+    } else {
+      results = await processUrls(urls, options);
+    }
+
+    const content = results
+      .map(formatted)
+      .join('\n\n\n----------\n----------\n\n');
+
+    if (results.length <= 1) {
+      if (options.output) {
+        const outputFile =
+          options.output === true ? 'output.md' : options.output;
+        fs.writeFileSync(
+          Path.resolve(process.cwd(), outputFile),
+          results[0].content
+        );
+        const size = ((results[0].content.length * 3) / 1024).toFixed(0);
+        console.log(`Content (${size}k) written to ${outputFile}`);
+      } else {
+        console.log(results[0].content);
+      }
+    } else {
+      if (options.output) {
+        if (typeof options.output === 'string') {
+          const outputFile = options.output;
+          fs.writeFileSync(Path.resolve(process.cwd(), outputFile), content);
+          const size = ((content.length * 3) / 1024).toFixed(0);
+          console.log(`Content (${size}k) written to ${outputFile}`);
+        } else {
+          for (const result of results) {
+            const filename =
+              (
+                result.title ||
+                ((url) => {
+                  url = URL.parse(url);
+                  return `${url.hostname
+                    .split('.')
+                    .slice(0, -1)
+                    .join('.')
+                    .replace('www.', '')}_${url.pathname}`;
+                })(result.url)
+              )
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/(^-|-$)/g, '') + '.md';
+            fs.writeFileSync(
+              Path.resolve(process.cwd(), filename),
+              formatted(result)
+            );
+            const size = ((result.content?.length ?? 0 * 3) / 1024).toFixed(0);
+            console.log(`Content (${size}k) written to ${filename}`);
+          }
+        }
+      } else {
+        console.log(content);
+      }
+    }
+    return { content, results };
+  } catch (error) {
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+function replacer(key, value) {
+  if (
+    ['content', 'excerpt', 'url', 'domain', 'direction'].includes(key) ||
+    !value
+  ) {
+    return undefined;
+  } else {
+    return value;
+  }
+}
+
+function formatted(result) {
+  if (result.error) {
+    return `Error processing ${result.url}: ${result.error.message}`;
+  }
+  const stringified = JSON.stringify(result, replacer, 2);
+  return [
+    `${result.title}\n`,
+    `${result.url}\n`,
+    // `[${r.title}](${r.url})\n`,
+    '```json',
+    stringified,
+    '```\n',
+    result.content || result.excerpt || '',
+  ].join('\n');
+}

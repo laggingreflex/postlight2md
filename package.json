@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@postlight/parser": "^2.2.3",
+    "fs-extra": "^11.3.0",
     "progress": "^2.0.3",
     "yargs": "^17.7.2"
   }
