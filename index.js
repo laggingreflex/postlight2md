@@ -68,6 +68,7 @@ const options = {};
 // Rename format to contentType internally
 if (argv.format) {
   options.contentType = argv.format;
+  argv.contentType = argv.format;
 }
 
 if (argv.header) {
@@ -132,10 +133,35 @@ async function processUrlsFromFile(filePath, concurrency, options) {
   const urls = fileContent.split(/\r?\n/).filter(Boolean);
   const bar = new ProgressBar('Processing [:bar] :current/:total', {
     total: urls.length,
-  }); // Add this line
-  await Bluebird.map(urls, (url) => processUrl(url, options, bar), {
-    concurrency,
   });
+
+  let allContent = '';
+
+  await Bluebird.map(
+    urls,
+    async (url) => {
+      try {
+        // console.log(`options:`, options)
+        const result = await Parser.parse(url, options);
+        // const result = await Parser.parse(url, options);
+        // allContent += result.content + '\n\n';
+        allContent += `\n\n---\n---\n---\n# [${result.title}](${url})\n\n${result.content}\n`;
+      } catch (error) {
+        console.error(`Error processing ${url}: ${error.message}`);
+      } finally {
+        bar.tick();
+      }
+    },
+    { concurrency }
+  );
+
+  if (argv.output !== false) {
+    const outputFile = argv.output === true ? 'output.md' : argv.output;
+    fs.writeFileSync(path.resolve(process.cwd(), outputFile), allContent);
+    console.log(`Content written to ${outputFile}`);
+  } else {
+    console.log(allContent);
+  }
 }
 
 async function main() {
