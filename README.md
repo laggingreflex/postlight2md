@@ -27,6 +27,7 @@ postlight2md <url> [options]
 - `-e, --extend <extend>`: Add a custom type to the response. Can be used multiple times.
 - `-E, --extend-list <extend-list>`: Add a custom type with multiple matches. Can be used multiple times.
 - `-a, --add-extractor <extractor>`: Add a custom extractor at runtime.
+- `-o, --output [filename]`: Specify the output file name. If not provided, the title of the content will be used to generate the file name.
 
 ### Examples
 
@@ -58,6 +59,18 @@ Add a custom extractor at runtime:
 
 ```sh
 postlight2md https://example.com -a "./path/to/extractor.js"
+```
+
+Specify the output file name:
+
+```sh
+postlight2md https://example.com -o custom-filename.md
+```
+
+Automatically generate the output file name based on the title:
+
+```sh
+postlight2md https://example.com -o
 ```
 
 ## License

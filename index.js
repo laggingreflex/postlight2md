@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import path from 'node:path';
+import fs from 'node:fs';
 import Parser from '@postlight/parser';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -32,6 +34,12 @@ const argv = yargs(hideBin(process.argv))
     alias: 'a',
     describe: 'Add a custom extractor at runtime',
     type: 'string',
+  })
+  .option('output', {
+    alias: 'o',
+    describe: 'Specify the output file name',
+    type: 'string',
+    coerce: (arg) => (arg === '' ? true : arg),
   }).argv;
 
 const url = argv._[0];
@@ -71,7 +79,26 @@ if (argv['add-extractor']) {
 }
 
 Parser.parse(url, options)
-  .then((result) => console.log(result.content))
+  .then((result) => {
+    const content = result.content;
+    if (argv.output) {
+      let filename;
+      if (argv.output === true) {
+        const title = result.title || 'output';
+        filename =
+          title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '') + '.md';
+      } else {
+        filename = argv.output;
+      }
+      fs.writeFileSync(path.resolve(process.cwd(), filename), content);
+      console.log(`Content written to ${filename}`);
+    } else {
+      console.log(content);
+    }
+  })
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
