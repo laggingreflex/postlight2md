@@ -5,10 +5,10 @@ import fs from 'node:fs';
 import Parser from '@postlight/parser';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import Bluebird from 'bluebird';
 
 const argv = yargs(hideBin(process.argv))
   .usage('Usage: $0 <url> [options]')
-  .demandCommand(1, 'You need to provide a URL to parse')
   .option('format', {
     alias: 'f',
     describe: 'Set content type (html|markdown|text)',
@@ -40,7 +40,25 @@ const argv = yargs(hideBin(process.argv))
     describe: 'Specify the output file name',
     type: 'string',
     coerce: (arg) => (arg === '' ? true : arg),
-  }).argv;
+  })
+  .option('url-file', {
+    alias: 'u',
+    describe: 'File containing URLs to process',
+    type: 'string'
+  })
+  .option('concurrency', {
+    alias: 'c',
+    describe: 'Number of concurrent requests',
+    type: 'number',
+    default: 1
+  })
+  .check(argv => {
+    if (!argv._.length && !argv.urlFile) {
+      throw new Error('You need to provide a URL to parse or a file containing URLs');
+    }
+    return true;
+  })
+  .argv;
 
 const url = argv._[0];
 const options = {};
@@ -78,12 +96,13 @@ if (argv['add-extractor']) {
   options.addExtractor = argv['add-extractor'];
 }
 
-Parser.parse(url, options)
-  .then((result) => {
+async function processUrl(url, options) {
+  try {
+    const result = await Parser.parse(url, options);
     const content = result.content;
-    if (argv.output) {
+    if (argv.output !== false) {
       let filename;
-      if (argv.output === true) {
+      if (argv.output === true || argv.urlFile) {
         const title = result.title || 'output';
         filename =
           title
@@ -98,8 +117,28 @@ Parser.parse(url, options)
     } else {
       console.log(content);
     }
-  })
-  .catch((error) => {
+  } catch (error) {
     console.error(error);
     process.exitCode = 1;
-  });
+  }
+}
+
+async function processUrlsFromFile(filePath, concurrency, options) {
+  const fileContent = fs.readFileSync(filePath, 'utf-8');
+  const urls = fileContent.split(/\r?\n/).filter(Boolean);
+  await Bluebird.map(urls, url => processUrl(url, options), { concurrency });
+}
+
+async function main() {
+  if (argv.urlFile) {
+    argv.output = argv.output !== false ? true : false;
+    await processUrlsFromFile(argv.urlFile, argv.concurrency, argv);
+  } else {
+    await processUrl(argv._[0], argv);
+  }
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});

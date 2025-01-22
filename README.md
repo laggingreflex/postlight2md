@@ -28,6 +28,8 @@ postlight2md <url> [options]
 - `-E, --extend-list <extend-list>`: Add a custom type with multiple matches. Can be used multiple times.
 - `-a, --add-extractor <extractor>`: Add a custom extractor at runtime.
 - `-o, --output [filename]`: Specify the output file name. If not provided, the title of the content will be used to generate the file name.
+- `-u, --url-file <file>`: Specify a file containing URLs to process, one per line.
+- `-c, --concurrency <number>`: Number of concurrent requests. Default is `1`.
 
 ### Examples
 
@@ -71,6 +73,24 @@ Automatically generate the output file name based on the title:
 
 ```sh
 postlight2md https://example.com -o
+```
+
+Process URLs from a file with default concurrency:
+
+```sh
+postlight2md -u urls.txt
+```
+
+Process URLs from a file with specified concurrency:
+
+```sh
+postlight2md -u urls.txt -c 5
+```
+
+Note: When using the `-u` option, the `-o` option defaults to generating filenames based on the title of each URL's content. To output to the console instead, explicitly set `-o` to `false`:
+
+```sh
+postlight2md -u urls.txt -o false
 ```
 
 ## License
